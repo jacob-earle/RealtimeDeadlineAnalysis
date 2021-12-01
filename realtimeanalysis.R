@@ -1,6 +1,9 @@
 #!/usr/bin/env -S Rscript --vanilla
 library(argparser)
 
+# global variable stores debug status
+DEBUG <- FALSE
+
 # function used to calculate the total utilization bound of a set of tasks
 # this is defined as the sum of (compute / period) over the set of tasks
 calculate_utilization_bound <- function(compute_times, periods) {
@@ -71,6 +74,10 @@ main <- function() {
   cat("Realtime Deadline Analyzer v. 0.1\n")
   
   if (isTRUE(argv$debug)) {
+    DEBUG <- TRUE
+  }
+  
+  if(isTRUE(DEBUG)){
     cat("Running in debug mode.\n")
     cat(paste0("Attempting to read from file: ", argv$file, "\n"))
   }
@@ -78,7 +85,7 @@ main <- function() {
   # parse csv file and validate that it contains the necessary values
   tasks <- read.csv(argv$file, colClasses = c("integer", "double", "double"))
   
-  if (isTRUE(argv$debug)) {
+  if (isTRUE(DEBUG)) {
     cat("Successfully read csv file.\n")
   }
   
@@ -88,7 +95,7 @@ main <- function() {
     stop("Data frame must contain information about the periods of the tasks in 'period' column.\n")
   } else if (!("compute" %in% colnames(tasks))) {
     stop("Data frame must contain information about the compute times of the tasks in the 'compute' column.\n")
-  } else if (isTRUE(argv$debug)) {
+  } else if (isTRUE(DEBUG)) {
     cat("Data read from csv file contains all necessary columns.\n")
     print(head(tasks))
   }
