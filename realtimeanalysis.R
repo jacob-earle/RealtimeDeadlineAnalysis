@@ -1,19 +1,58 @@
 #!/usr/bin/env -S Rscript --vanilla
 library(argparser)
 
-# function used to statically see whether deadlines will be met under hard constraints
-hard_deadline_analyzer <- function(task_data) {
+# function used to calculate the total utilization bound of a set of tasks
+# this is defined as the sum of (compute / period) over the set of tasks
+calculate_utilization_bound <- function(compute_times, periods) {
   # for each task with values of period and compute, we will calculate ( compute / period ) to find the fraction of compute time used by the task
-  task_compute_times <- mapply(function(x, y) x / y, task_data$compute, task_data$period)
+  task_compute_times <- mapply(function(x, y) x / y, compute_times, periods)
   # if the sum of these quotients across all tasks is less than 1, then the tasks will be able to be scheduled under RMS or EDF algorithms
   sum_of_compute_times <- sum(task_compute_times)
-  
-  cat(paste0("Sum of ( compute time / period ) over all tasks: ", sum_of_compute_times, "\n"))
-  if (sum_of_compute_times < 1) {
-    cat("Tasks CAN be scheduled successfully under hard realtime deadlines.\n")
-  } else {
-    cat("Tasks CANNOT be scheduled successfully under hard realtime deadlines.\n")
+  return(sum_of_compute_times)
+}
+
+# function used to determine whether the task periods are harmonic
+# the set of periods is harmonic if each period is an integer multiple of the next smaller period
+periods_are_harmonic <- function(periods) {
+  n <- length(periods)
+  if(n < 2) {
+    return(TRUE)
   }
+  
+  sorted_periods <- sort(periods)
+  
+  # calculate the modulus of each successive pair of periods
+  successive_modulus <- mapply(function(x, y) x %% y, sorted_periods[2:n], sorted_periods[1:(n-1)])
+  
+  return(all(successive_modulus == 0))
+}
+
+# function used to statically see whether deadlines will be met under hard constraints
+hard_deadline_analyzer_single_core <- function(task_data) {
+  n <- length(task_data)
+  cat(paste0("Number of tasks: ", n, "\n"))
+  utilization <- calculate_utilization_bound(task_data$compute, task_data$period)
+  
+  cat(paste0("Sum of ( compute time / period ) over all tasks: ", utilization, "\n"))
+  
+  is_harmonic <- periods_are_harmonic(task_data$period)
+  cat(paste0("Task periods are harmonic: ", ifelse(is_harmonic, "Y", "N"), "\n"))
+  
+  # a sufficient bound on feasible compute time under RMS given by Liu and Layland
+  rms_upper_bound <- n * (2 ^ (1/n) - 1)
+  cat(paste0("Viable upper bound on utilization under RMS: ", rms_upper_bound, " (Aharmonic), 1 (Harmonic)\n"))
+  
+  # the tasks can be scheduled under RMS if either
+  # 1. utilization <= rms_upper_bound
+  # 2. utilization <= 1 and periods of tasks are harmonic
+  schedulable_under_rms <-  (utilization <= rms_upper_bound) || (utilization <= 1 && is_harmonic)
+  cat(paste0("Tasks are schedulable under RMS: ", ifelse(schedulable_under_rms, "Y", "N"), "\n"))
+  
+  # EDF is an optimal scheduling algorithm and guarantee tasks can be scheduled as long as the utilization is less than 1
+  edf_upper_bound <- 1
+  cat(paste0("Viable upper bound on utilization under EDF: ", edf_upper_bound, "\n"))
+  schedulable_under_edf <- utilization <= edf_upper_bound
+  cat(paste0("Tasks are schedulable under EDF: ", ifelse(schedulable_under_edf, "Y", "N"), "\n"))
 }
 
 # main body of script
@@ -33,9 +72,8 @@ main <- function() {
   
   if (isTRUE(argv$debug)) {
     cat("Running in debug mode.\n")
+    cat(paste0("Attempting to read from file: ", argv$file, "\n"))
   }
-  
-  cat(paste0("Attempting to read from file: ", argv$file, "\n"))
   
   # parse csv file and validate that it contains the necessary values
   tasks <- read.csv(argv$file, colClasses = c("integer", "double", "double"))
@@ -52,6 +90,7 @@ main <- function() {
     stop("Data frame must contain information about the compute times of the tasks in the 'compute' column.\n")
   } else if (isTRUE(argv$debug)) {
     cat("Data read from csv file contains all necessary columns.\n")
+    print(head(tasks))
   }
   
   # analyze the data set statically under soft deadline constraints if the "--soft" flag was specified
@@ -60,7 +99,7 @@ main <- function() {
   }
   # 
   else {
-    hard_deadline_analyzer(task_data = tasks)
+    hard_deadline_analyzer_single_core(task_data = tasks)
   }
 }
 
