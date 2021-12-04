@@ -30,14 +30,9 @@ periods_are_harmonic <- function(periods) {
   return(all(successive_modulus == 0))
 }
 
-# function used to statically see whether deadlines will be met under hard constraints
-hard_deadline_analyzer_single_core <- function(task_data) {
-  n <- length(task_data)
-  cat(paste0("Number of tasks: ", n, "\n"))
-  utilization <- calculate_utilization_bound(task_data$compute, task_data$period)
-  
-  cat(paste0("Sum of ( compute time / period ) over all tasks: ", utilization, "\n"))
-  
+# analyze the feasability of RMS under traditional Liu-Layland test in single core contexts
+liu_layland_rms_test <- function(n, task_data, utilization) {
+  cat("RMS Schedulability (Liu-Layland)\n")
   is_harmonic <- periods_are_harmonic(task_data$period)
   cat(paste0("Task periods are harmonic: ", ifelse(is_harmonic, "Y", "N"), "\n"))
   
@@ -50,12 +45,62 @@ hard_deadline_analyzer_single_core <- function(task_data) {
   # 2. utilization <= 1 and periods of tasks are harmonic
   schedulable_under_rms <-  (utilization <= rms_upper_bound) || (utilization <= 1 && is_harmonic)
   cat(paste0("Tasks are schedulable under RMS: ", ifelse(schedulable_under_rms, "Y", "N"), "\n"))
+}
+
+# analyze the feasability of RMS under new Bini et. al test
+bini_rms_test <- function(task_data) {
+  cat("RMS Schedulability (Bini et. al)\n")
   
+  # computing the product of (compute time / period + 1) across the tasks
+  calculate_bini_statistic <- function(compute_times, periods) {
+    individual_utilizations <- mapply(function(x,y) (x / y) + 1, compute_times, periods)
+    return(prod(individual_utilizations))
+  }
+  
+  bini_statistic <- calculate_bini_statistic(task_data$compute, task_data$period)
+  cat(paste0("Product of (compute time / period + 1) over all tasks (Bini statistic): ", bini_statistic, "\n"))
+  cat("Viable upper bound on Bini statistic: 2\n")
+  schedulable_under_rms <- (bini_statistic <= 2)
+  cat(paste0("Tasks are schedulable under RMS: ", ifelse(schedulable_under_rms, "Y", "N"), "\n"))
+}
+
+# analyze the feasability of EDF in single core contexts
+edf_test <- function(utilization) {
+  cat("EDF Schedulability\n")
   # EDF is an optimal scheduling algorithm and guarantee tasks can be scheduled as long as the utilization is less than 1
   edf_upper_bound <- 1
   cat(paste0("Viable upper bound on utilization under EDF: ", edf_upper_bound, "\n"))
   schedulable_under_edf <- utilization <= edf_upper_bound
   cat(paste0("Tasks are schedulable under EDF: ", ifelse(schedulable_under_edf, "Y", "N"), "\n"))
+}
+
+
+# function used to statically check whether deadlines will be met under hard constraints in single core context
+hard_deadline_analyzer_single_core <- function(task_data, use_bini) {
+  cat("Running hard deadline analysis of single core system...\n")
+  n <- length(task_data)
+  cat(paste0("Number of tasks: ", n, "\n"))
+  utilization <- calculate_utilization_bound(task_data$compute, task_data$period)
+  
+  cat(paste0("Sum of ( compute time / period ) over all tasks: ", utilization, "\n\n"))
+  
+  liu_layland_rms_test(n, task_data, utilization)
+  
+  if (use_bini) {
+    cat("\n")
+    bini_rms_test(task_data)
+  }
+  
+  cat("\n")
+  edf_test(utilization)
+}
+
+# function used to statically check whether deadlines will be met under hard constraints on multicore systems
+# m represents the number of cores
+hard_deadline_analyzer_multi_core <- function(task_data, m) {
+  cat("Running hard deadline analysis of multicore system...\n")
+  n <- length(task_data)
+  cat(paste0("Number of tasks: ", n, "\n"))
 }
 
 # main body of script
@@ -65,7 +110,9 @@ main <- function() {
   
   p <- add_argument(p, "file", help="Name of csv file containing task periods and deadlines")
   p <- add_argument(p, "--debug", help="Print additional information for debugging", flag=TRUE)
+  p <- add_argument(p, "--cores", help="Number of cores, must be positive, triggers multicore analysis for values greater than 1", type="integer", default=1)
   p <- add_argument(p, "--soft", help="Analyze tasks under soft deadline constraints, the file used must provide mean and standard deviation of execution times", flag=TRUE)
+  p <- add_argument(p, "--bini", help="Use the new feasability test from Bini et. al instead of the Liu-Layland test, only applicable in hard, single core context", flag=TRUE)
   
   # parsing arguments
   argv <- parse_args(p)
@@ -99,14 +146,18 @@ main <- function() {
     cat("Data read from csv file contains all necessary columns.\n")
     print(head(tasks))
   }
-  
+  cat(paste0("Number of cores: ", argv$cores, "\n\n"))
   # analyze the data set statically under soft deadline constraints if the "--soft" flag was specified
   if (isTRUE(argv$soft)) {
     cat("Soft deadline analysis is not supported yet.\n")
   }
   # 
   else {
-    hard_deadline_analyzer_single_core(task_data = tasks)
+    if (argv$cores > 1) {
+      hard_deadline_analyzer_multi_core(task_data = tasks, m = argv$cores)
+    } else {
+      hard_deadline_analyzer_single_core(task_data = tasks, use_bini = argv$bini)
+    }
   }
 }
 
