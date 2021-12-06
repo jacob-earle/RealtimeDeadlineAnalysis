@@ -31,7 +31,7 @@ check_periods <- function(task_data) {
 # this is defined as the sum of (compute / period) over the set of tasks
 calculate_utilization_bound <- function(compute_times, periods) {
   # for each task with values of period and compute, we will calculate ( compute / period ) to find the fraction of compute time used by the task
-  task_compute_times <- mapply(function(x, y) x / y, compute_times, periods)
+  task_compute_times <- compute_times / periods
   # if the sum of these quotients across all tasks is less than 1, then the tasks will be able to be scheduled under RMS or EDF algorithms
   sum_of_compute_times <- sum(task_compute_times)
   return(sum_of_compute_times)
@@ -209,12 +209,41 @@ hard_deadline_analyzer_single_core <- function(task_data, use_bini, use_exact_de
   edf_test(task_data, utilization, use_exact_deadlines)
 }
 
+# helper function that will check whether the tasks can be scheduled under RMFF
+rmff_test <- function(task_data, utilization, m) {
+  cat("RMFF Schedulability\n")
+  utilizations <- task_data$compute / task_data$period
+  maximum_individual_utilization <- max(utilizations)
+  cat(paste0("Maximum individual utilization: ", maximum_individual_utilization, "\n"))
+  baker_oh_bound <- m * (2^(1/2) - 1)
+  cat(paste0("Viable upper bound on utilization under RMFF (Baker-Oh): ", baker_oh_bound, "\n"))
+  baker_2003_bound <- (m / 2) * (1 - maximum_individual_utilization) + maximum_individual_utilization
+  cat(paste0("Viable upper bound on utilization under RMFF (Baker 2003): ", baker_2003_bound, "\n"))
+  schedulable_under_rmff <- utilization <= max(baker_oh_bound, baker_2003_bound)
+  cat(paste0("Tasks are schedulable under RMFF: ", ifelse(schedulable_under_rmff, "Y", "?"), "\n"))
+}
+
+# helper function that will check whether the tasks can be scheduled under some fixed priority multicore scheduling algorithm
+multicore_fp_test <- function(utilization, m) {
+  cat("General Schedulability\n")
+  andersson_bound <- (m + 1) / 2
+  cat(paste0("Viable upper bound on utilization for fixed priority: ", andersson_bound, "\n"))
+  schedulable_under_fp <- utilization <= andersson_bound
+  cat(paste0("Tasks are schedulable under some fixed priority algorithm: ", ifelse(schedulable_under_fp, "Y", "?"), "\n"))
+}
+
 # function used to statically check whether deadlines will be met under hard constraints on multicore systems
 # m represents the number of cores
 hard_deadline_analyzer_multi_core <- function(task_data, m) {
   cat("Running hard deadline analysis of multicore system...\n")
+  cat("Note: Only sufficient tests exist for feasability on multicore systems, so we cannot conclusively state whether tasks cannot be scheduled.\n")
   n <- nrow(task_data)
   cat(paste0("Number of tasks: ", n, "\n"))
+  utilization <- calculate_utilization_bound(compute_times =  task_data$compute, periods =  task_data$period)
+  cat(paste0("Sum of ( compute time / period ) over all tasks: ", utilization, "\n\n"))
+  rmff_test(task_data, utilization, m)
+  cat("\n")
+  multicore_fp_test(utilization, m)
 }
 
 # main body of script
