@@ -17,6 +17,16 @@ check_deadlines <- function(task_data) {
   }
 }
 
+# function used to check that the total computation time of each task is less than or equal to its period
+# will panic if this condition is not met
+check_periods <- function(task_data) {
+  for (i in seq(1, nrow(task_data))) {
+    if (task_data$compute[i] > task_data$period[i]) {
+      stop(paste0("Task ", task_data$taskid[i], " has a greater compute time than its period."))
+    }
+  }
+}
+
 # function used to calculate the total utilization bound of a set of tasks
 # this is defined as the sum of (compute / period) over the set of tasks
 calculate_utilization_bound <- function(compute_times, periods) {
@@ -129,8 +139,8 @@ baruah_test_helper <- function(task_data, utilization) {
   
   # generate all deadlines that are less than the upper bound for testing
   times_to_test <- c()
-  for (d in deadlines) {
-    times_to_test <- c(times_to_test, seq(d, upper_bound_for_testing, by=d))
+  for (i in seq(1, nrow(task_data))) {
+    times_to_test <- c(times_to_test, seq(deadlines[i], upper_bound_for_testing, by=periods[i]))
   }
   times_to_test <- unique(times_to_test)
   
@@ -254,6 +264,7 @@ main <- function() {
     print(head(tasks))
   }
   
+  check_periods(tasks)
   if (argv$deadlines) {
     check_deadlines(tasks)
   }
@@ -266,6 +277,9 @@ main <- function() {
   # running analysis under hard deadline constraints 
   else {
     if (argv$cores > 1) {
+      if (argv$deadlines) {
+        stop("Use of explicit deadlines is not supported for multicore systems.")
+      }
       hard_deadline_analyzer_multi_core(task_data = tasks, m = argv$cores)
     } else {
       hard_deadline_analyzer_single_core(task_data = tasks, use_bini = argv$bini, use_exact_deadlines = argv$deadlines)
