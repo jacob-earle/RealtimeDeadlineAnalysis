@@ -254,7 +254,6 @@ main <- function() {
   p <- add_argument(p, "file", help="Name of csv file containing task periods and deadlines")
   p <- add_argument(p, "--debug", help="Print additional information for debugging", flag=TRUE)
   p <- add_argument(p, "--cores", help="Number of cores, must be positive, triggers multicore analysis for values greater than 1", type="integer", default=1)
-  p <- add_argument(p, "--soft", help="Analyze tasks under soft deadline constraints, the file used must provide mean and standard deviation of execution times", flag=TRUE)
   p <- add_argument(p, "--bini", help="Use the new feasability test from Bini et. al instead of the Liu-Layland test, only applicable in hard, single core context", flag=TRUE)
   p <- add_argument(p, "--deadlines", help="Let deadlines be explicitly set rather than being assumed to be equal to the periods, when using this option, your file must contain a deadline column", flag=TRUE)
   
@@ -299,20 +298,14 @@ main <- function() {
   }
   
   cat(paste0("Number of cores: ", argv$cores, "\n\n"))
-  # analyze the data set statically under soft deadline constraints if the "--soft" flag was specified
-  if (isTRUE(argv$soft)) {
-    cat("Soft deadline analysis is not supported yet.\n")
-  }
   # running analysis under hard deadline constraints 
-  else {
-    if (argv$cores > 1) {
-      if (argv$deadlines) {
-        stop("Use of explicit deadlines is not supported for multicore systems.")
-      }
-      hard_deadline_analyzer_multi_core(task_data = tasks, m = argv$cores)
-    } else {
-      hard_deadline_analyzer_single_core(task_data = tasks, use_bini = argv$bini, use_exact_deadlines = argv$deadlines)
+  if (argv$cores > 1) {
+    if (argv$deadlines) {
+      stop("Use of explicit deadlines is not supported for multicore systems.")
     }
+    hard_deadline_analyzer_multi_core(task_data = tasks, m = argv$cores)
+  } else {
+    hard_deadline_analyzer_single_core(task_data = tasks, use_bini = argv$bini, use_exact_deadlines = argv$deadlines)
   }
 }
 
